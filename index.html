@@ -865,7 +865,23 @@
 
 <div class="toast" id="toast">Saved</div>
 
-<script>
+<script type="module">
+/* ==================== FIREBASE ==================== */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+
+const _fbApp = initializeApp({
+  apiKey: "AIzaSyAPxuiGUlJqEGYB6T_j3V-kGs5b27rVdjI",
+  authDomain: "xpeer-1on1.firebaseapp.com",
+  projectId: "xpeer-1on1",
+  storageBucket: "xpeer-1on1.firebasestorage.app",
+  messagingSenderId: "804758030333",
+  appId: "1:804758030333:web:b7d65db9b7ca48ce513b94"
+});
+const _db = getFirestore(_fbApp);
+const _DOC = doc(_db, 'sessions', 'shared');
+let _saving = false;
+
 /* ==================== STATE ==================== */
 const STORE_KEY = 'xpeer_1on1_v2';
 
@@ -922,6 +938,10 @@ function load(){
 function save(){
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
   toast('Saved · ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+  _saving = true;
+  setDoc(_DOC, JSON.parse(JSON.stringify(state)))
+    .catch(e => console.error('Sync error', e))
+    .finally(() => setTimeout(() => _saving = false, 600));
 }
 let toastTimer;
 function toast(msg){
@@ -1532,6 +1552,30 @@ document.getElementById('tl-next').addEventListener('click', () => {
 /* ==================== INIT ==================== */
 applyTheme();
 render();
+
+/* ==================== FIRESTORE SYNC ==================== */
+onSnapshot(_DOC, (snap) => {
+  if (_saving) return;
+  if (!snap.exists()) {
+    // First use: push local seed to Firestore
+    setDoc(_DOC, JSON.parse(JSON.stringify(state)));
+    return;
+  }
+  const remote = snap.data();
+  // Ensure required fields on each topic
+  if (remote.topics) {
+    remote.topics = remote.topics.map(t => ({
+      tags: [], elapsed: 0, budget: 8, steps: [], notes: '', ...t
+    }));
+  }
+  state = Object.assign({}, state, remote);
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  // Don't re-render if user is actively typing
+  const ae = document.activeElement;
+  const editing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
+  if (!editing) { applyTheme(); render(); }
+  toast('Synced · ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+});
 </script>
 
 </body>
